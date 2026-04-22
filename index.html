@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- MG Hortifruti v1776572202-1776571042 -->
+<!DOCTYPE html><!-- OLA Hortifruti v1776630993 -->
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -26,7 +26,7 @@
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden;background:var(--cream);font-family:var(--font);color:var(--text)}
-#app{height:100%;display:flex;flex-direction:column;max-width:430px;margin:0 auto;background:var(--cream);position:relative;overflow:hidden}
+#app{height:100%;display:flex;flex-direction:column;max-width:480px;width:100%;margin:0 auto;background:var(--cream);position:relative;overflow:hidden}
 .screen{position:absolute;inset:0;display:flex;flex-direction:column;transform:translateX(100%);transition:transform .32s cubic-bezier(.4,0,.2,1);background:var(--cream);overflow:hidden;will-change:transform}
 .screen.active{transform:translateX(0)}
 .screen.slide-left{transform:translateX(-20%)}
@@ -242,6 +242,30 @@ html,body{height:100%;overflow:hidden;background:var(--cream);font-family:var(--
 /* FORM PRODUTO */
 .fp-select{width:100%;height:48px;background:var(--white);border:1.5px solid var(--border);border-radius:var(--r-lg);padding:0 12px;font-family:var(--font);font-size:15px;color:var(--text);outline:none;-webkit-appearance:none;appearance:none}
 .fp-select:focus{border-color:var(--green3)}
+
+/* ===== RESPONSIVE DESKTOP ===== */
+@media (min-width:600px){
+  html,body{background:#e8e0d5;height:100%}
+  #app{
+    height:calc(100vh - 40px);
+    max-height:900px;
+    margin:20px auto;
+    border-radius:24px;
+    box-shadow:0 8px 40px rgba(0,0,0,0.18);
+    overflow:hidden;
+  }
+  .screen{border-radius:24px;}
+  .pgrid{grid-template-columns:1fr 1fr 1fr;gap:14px}
+  .nav{border-radius:0 0 24px 24px}
+}
+@media (min-width:900px){
+  #app{max-width:520px}
+  .pgrid{grid-template-columns:1fr 1fr 1fr}
+}
+@media (max-width:350px){
+  .pgrid{grid-template-columns:1fr 1fr;gap:8px}
+  .pcard{min-height:160px}
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -273,6 +297,9 @@ html,body{height:100%;overflow:hidden;background:var(--cream);font-family:var(--
         <div class="fg"><label>Nome</label><input type="text" id="r-name" placeholder="Seu nome completo"></div>
         <div class="fg"><label>E-mail</label><input type="email" id="r-email" placeholder="seu@email.com"></div>
         <div class="fg"><label>Telefone</label><input type="tel" id="r-phone" placeholder="(15) 99999-9999"></div>
+        <div class="fg"><label>Rua e número *</label><input type="text" id="r-addr" placeholder="Ex: Rua das Flores, 123"></div>
+        <div class="fg"><label>Bairro e cidade *</label><input type="text" id="r-bairro" placeholder="Ex: Centro — Sorocaba"></div>
+        <div class="fg"><label>Complemento</label><input type="text" id="r-comp" placeholder="Apto, referência (opcional)"></div>
         <div class="fg"><label>Senha</label><input type="password" id="r-pass" placeholder="Mínimo 6 caracteres"></div>
         <button class="btn btn-green" onclick="doReg()">Criar conta</button>
       </div>
@@ -847,10 +874,11 @@ async function doReg(){
         email=document.getElementById('r-email').value.trim(),
         phone=document.getElementById('r-phone').value.trim(),
         addr=document.getElementById('r-addr')?.value.trim()||'',
+        bairro=document.getElementById('r-bairro')?.value.trim()||'',
         comp=document.getElementById('r-comp')?.value.trim()||'',
         pass=document.getElementById('r-pass').value;
   if(!name||!email||!phone||!pass){toast('Preencha todos os campos');return}
-  if(!addr){toast('Informe o endereço de entrega');return}
+  if(!addr||!bairro){toast('Informe rua e bairro');return}
   if(pass.length<6){toast('Senha muito curta');return}
   const btn=document.querySelector('#f-reg .btn-green');
   if(btn){btn.textContent='Criando conta...';btn.disabled=true;}
@@ -859,21 +887,31 @@ async function doReg(){
     if(error){toast(error.message.includes('already')? 'E-mail já cadastrado':'Erro ao criar conta');if(btn){btn.textContent='Criar conta';btn.disabled=false;}return;}
     const uid=data.user.id;
     const initials=name.split(' ').map(x=>x[0]).join('').substring(0,2).toUpperCase();
-    const address=comp?addr+' — '+comp:addr;
-    await supa.from('profiles').insert({id:uid,name,email,phone,initials,plan:null,address});
+    const address=addr+', '+bairro+(comp?' — '+comp:'');
+    // Tenta inserir perfil (pode falhar por RLS mas não bloqueia o login)
+    try{
+      await supa.from('profiles').insert({id:uid,name,email,phone,initials,plan:null,address});
+    }catch(profileErr){
+      console.warn('Perfil não inserido via RLS, tentando upsert...');
+      try{
+        await supa.from('profiles').upsert({id:uid,name,email,phone,initials,plan:null,address});
+      }catch(e2){console.warn('Upsert falhou:', e2);}
+    }
     CU={id:uid,email,name,initials,plan:null,phone,address};
     ADM=false;LS.s('cu',CU);LS.s('adm',false);
     if(btn){btn.textContent='Criar conta';btn.disabled=false;}
     enterApp();
-  }catch(err){toast('Erro ao criar conta');if(btn){btn.textContent='Criar conta';btn.disabled=false;}}
+  }catch(err){
+    console.error('Erro cadastro:', err);
+    toast('Erro ao criar conta: '+( err?.message||'tente novamente'));
+    if(btn){btn.textContent='Criar conta';btn.disabled=false;}
+  }
 }
 function enterApp(){
   HIST=[];
   document.querySelector('.screen.active')?.classList.remove('active');
-  const home=document.getElementById('s-home');
-  home.classList.add('active');
-  // Renderiza home imediatamente com PRODS padrão
-  rHome();
+  document.getElementById('s-home').classList.add('active');
+  onEnter('s-home');
 }
 async function doLogout(){
   await supa.auth.signOut();
@@ -917,7 +955,9 @@ async function loadProdsFromCloud(){
 
 // ===== HOME =====
 function rHome(){
-  if(!CU)return;
+  if(!CU){return;}
+  // Garante que PRODS está disponível
+  if(typeof PRODS==='undefined'||!PRODS.length){return;}
   const prodCount=getProds().length;
   document.getElementById('h-name').innerHTML=CU.name.split(' ')[0]+' <em>👋</em>';
   console.log('rHome called, produtos:', prodCount, 'CU:', CU?.name);
@@ -946,12 +986,12 @@ function filterCat(c,ctx){
 }
 function renderGrid(id,limit){
   const allProds=getProds();
-  console.log('renderGrid called, id:', id, 'total prods:', allProds.length, 'CAT:', CAT);
   let ps=allProds.filter(p=>p.active!==false&&(CAT==='Todos'||p.cat===CAT));
   if(limit)ps=ps.slice(0,limit);
-  console.log('filtered prods:', ps.length);
+  const el=document.getElementById(id);
+  if(!el)return;
   if(ps.length===0){
-    document.getElementById(id).innerHTML='<div style="padding:20px;color:red;font-size:14px">Nenhum produto encontrado (cat:'+CAT+')</div>';
+    el.innerHTML='<div style="padding:40px 20px;text-align:center;color:var(--text3)">Nenhum produto nesta categoria</div>';
     return;
   }
   document.getElementById(id).innerHTML=ps.map(p=>{
@@ -1631,10 +1671,8 @@ async function _init(){
       const t=ADM?'s-admin':'s-home';
       document.getElementById('s-login').classList.remove('active');
       document.getElementById(t).classList.add('active');
-      // Renderiza imediatamente com dados locais
       onEnter(t);
-      // Carrega produtos do cloud em background (não bloqueia)
-      if(!ADM)loadProdsFromCloud().then(p=>{if(p)rHome();});
+      if(!ADM)loadProdsFromCloud().then(p=>{if(p&&p.length)rHome();});
       return;
     }
   }catch(e){console.warn('Init session error:',e);}
